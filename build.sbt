@@ -1,12 +1,12 @@
 name := """pincette-jsontoexcel"""
 organization := "net.pincette"
-version := "1.0.0"
+version := "1.0.1"
 
 scalaVersion := "2.12.4"
 
 libraryDependencies ++= Seq(
   "javax.json" % "javax.json-api" % "1.1.2",
-  "net.pincette" % "pincette-common" % "1.3.2",
+  "net.pincette" % "pincette-common" % "1.3.3",
   "org.apache.poi" % "poi" % "3.17",
   "org.apache.poi" % "poi-ooxml" % "3.17"
 )
@@ -41,3 +41,5 @@ publishTo := {
   else
     Some("releases"  at nexus + "service/local/staging/deploy/maven2")
 }
+
+credentials += Credentials(Path.userHome / ".sbt" / ".sonatype_credentials")

@@ -2,7 +2,6 @@ package net.pincette.jsontoexcel;
 
 import static java.lang.Integer.MAX_VALUE;
 import static java.time.Instant.parse;
-import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Stream.empty;
 import static javax.json.Json.createValue;
@@ -26,12 +25,10 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
-import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import javax.json.JsonObject;
-import javax.json.JsonString;
 import javax.json.JsonValue;
 import javax.json.stream.JsonParser;
 import net.pincette.util.Json;
@@ -47,8 +44,8 @@ import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
 /**
- * With this class JSON can be merged with an Excel template, which should contain one sheet with
- * a row that has only bindings of the form "{field}" if the JSON is an array. If the JSON is an
+ * With this class JSON can be merged with an Excel template, which should contain one sheet with a
+ * row that has only bindings of the form "{field}" if the JSON is an array. If the JSON is an
  * object the template may have such bindings everywhere. The field may be a dot-separated path.
  *
  * @author Werner Donn\u00e9
@@ -94,7 +91,7 @@ public class Merge {
                 copyCell(
                     r,
                     c,
-                    Optional.of(r.getLastCellNum()).filter(n -> n != -1).orElse((short) 0),
+                    c.getColumnIndex(),
                     cell ->
                         when(isBindingCell(c))
                             .run(
@@ -191,6 +188,7 @@ public class Merge {
 
   private static JsonValue getValue(final String value, final JsonObject json) {
     return reduceValue(
+        value,
         getBindings(value)
             .map(binding -> pathSearch(json, binding).orElse(createValue("")))
             .toArray(JsonValue[]::new));
@@ -240,7 +238,7 @@ public class Merge {
     return stream(wb.getSheetAt(0).rowIterator())
         .reduce(
             newSheet,
-            (s, r) -> copyRow(r, s.createRow(s.getLastRowNum() + 1), json, dateStyle).getSheet(),
+            (s, r) -> copyRow(r, s.createRow(r.getRowNum()), json, dateStyle).getSheet(),
             (s1, s2) -> s1)
         .getWorkbook();
   }
@@ -264,18 +262,15 @@ public class Merge {
         .orElse(out);
   }
 
-  private static JsonValue reduceValue(final JsonValue[] values) {
-    final Supplier<JsonValue> array =
-        () ->
-            createValue(
-                Arrays.stream(values)
-                    .filter(Json::isString)
-                    .map(Json::asString)
-                    .map(JsonString::getString)
-                    .collect(joining(" ")));
-    final Supplier<JsonValue> arrayOr = () -> values.length == 1 ? values[0] : array.get();
+  private static JsonValue reduceValue(final String value, final JsonValue[] values) {
+    return createValue(values.length == 0 ? "" : replaceMatches(value, values));
+  }
 
-    return values.length == 0 ? createValue("") : arrayOr.get();
+  private static String replaceMatches(final String value, final JsonValue[] values) {
+    return Arrays.stream(values)
+        .map(net.pincette.util.Json::toNative)
+        .map(Object::toString)
+        .reduce(value, (result, v) -> BINDING.matcher(result).replaceFirst(v), (r1, r2) -> r1);
   }
 
   private static SXSSFCell setValue(
