@@ -1,9 +1,12 @@
 package net.pincette.jsontoexcel;
 
 import static java.lang.Integer.MAX_VALUE;
+import static java.lang.System.exit;
 import static java.time.Instant.parse;
+import static java.util.logging.Logger.getGlobal;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Stream.empty;
+import static javax.json.Json.createParser;
 import static javax.json.Json.createValue;
 import static net.pincette.util.Collections.indexedStream;
 import static net.pincette.util.Json.asNumber;
@@ -17,6 +20,8 @@ import static net.pincette.util.Util.pathSearch;
 import static net.pincette.util.Util.tryToDoWithRethrow;
 import static net.pincette.util.When.when;
 
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Arrays;
@@ -24,6 +29,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -135,6 +141,8 @@ public class Merge {
   private static SXSSFSheet createSheet(final XSSFWorkbook in, final SXSSFWorkbook out) {
     final SXSSFSheet newSheet = out.createSheet();
 
+    newSheet.untrackAllColumnsForAutoSizing();
+
     Optional.ofNullable(in.getSheetAt(0))
         .map(XSSFSheet::getPaneInformation)
         .filter(PaneInformation::isFreezePane)
@@ -202,6 +210,17 @@ public class Merge {
     return stream(row.iterator()).allMatch(Merge::isBindingCell);
   }
 
+  public static void main(final String[] args) throws Exception {
+    if (args.length != 3) {
+      usage();
+    }
+
+    merge(
+        createParser(new FileInputStream(args[0])),
+        new FileInputStream(args[1]),
+        new FileOutputStream(args[2]));
+  }
+
   public static void merge(
       final JsonParser parser, final InputStream template, final OutputStream out) {
     if (parser.hasNext()) {
@@ -220,14 +239,23 @@ public class Merge {
 
   public static void merge(
       final JsonObject json, final InputStream template, final OutputStream out) {
-    tryToDoWithRethrow(
-        () -> new XSSFWorkbook(template), wb -> merge(json, wb, new SXSSFWorkbook()).write(out));
+    merge(template, out, (wb, newWb) -> merge(json, wb, newWb));
   }
 
   public static void merge(
       final Stream<JsonValue> stream, final InputStream template, final OutputStream out) {
+    merge(template, out, (wb, newWb) -> merge(stream, wb, newWb));
+  }
+
+  private static void merge(
+      final InputStream template,
+      final OutputStream out,
+      final BiFunction<XSSFWorkbook, SXSSFWorkbook, SXSSFWorkbook> run) {
     tryToDoWithRethrow(
-        () -> new XSSFWorkbook(template), wb -> merge(stream, wb, new SXSSFWorkbook()).write(out));
+        SXSSFWorkbook::new,
+        newWb ->
+            tryToDoWithRethrow(
+                () -> new XSSFWorkbook(template), wb -> run.apply(wb, newWb).write(out)));
   }
 
   private static SXSSFWorkbook merge(
@@ -301,5 +329,10 @@ public class Merge {
     }
 
     return cell;
+  }
+
+  private static void usage() {
+    getGlobal().severe("Usage: net.pincette.jsontoexcel.Merge json template excel");
+    exit(1);
   }
 }
